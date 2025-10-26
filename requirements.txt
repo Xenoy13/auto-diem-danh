@@ -1,4 +1,4 @@
+undetected-chromedriver
 selenium
 schedule
 requests
-undetected-chromedriver
