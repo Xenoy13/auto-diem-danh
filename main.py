@@ -16,7 +16,7 @@ CHAT_ID = os.getenv("CHAT_ID")
 TIME_FILE = "time.txt"
 LAST_FILE = "last_checkin.txt"
 
-# ===== ĐỌC GIỜ LƯU TRƯỚC =====
+# ===== ĐỌC GIỜ CŨ =====
 def read_time():
     if os.path.exists(TIME_FILE):
         return open(TIME_FILE).read().strip()
@@ -24,7 +24,7 @@ def read_time():
 
 CHECKIN_TIME = read_time()
 
-# ===== GỬI TIN NHẮN TELEGRAM =====
+# ===== GỬI TIN NHẮN =====
 def send_telegram(msg):
     requests.get(
         f"https://api.telegram.org/bot{BOT_TOKEN}/sendMessage",
@@ -37,7 +37,7 @@ def send_photo(photo_path):
         files = {"photo": open(photo_path, "rb")}
         requests.post(f"https://api.telegram.org/bot{BOT_TOKEN}/sendPhoto?chat_id={CHAT_ID}", files=files)
     except:
-        send_telegram("⚠ Gửi ảnh thất bại nhưng điểm danh đã xong")
+        send_telegram("⚠ Gửi ảnh thất bại, nhưng điểm danh thành công.")
 
 # ===== HÀM ĐIỂM DANH =====
 def check_in():
@@ -51,16 +51,16 @@ def check_in():
 
         driver = uc.Chrome(options=chrome_options)
         driver.get(URL)
-        time.sleep(2)
+        time.sleep(3)
 
         email_input = driver.find_element(By.CSS_SELECTOR, "input[type='text'], input[type='email']")
         email_input.clear()
         email_input.send_keys(EMAIL)
 
-        confirm_btn = driver.find_element(By.XPATH, "//button[contains(., 'Xác nhận Điểm danh')]")
+        confirm_btn = driver.find_element(By.XPATH, "//button[contains(., 'Xác nhận')]")
         confirm_btn.click()
 
-        time.sleep(3)
+        time.sleep(4)
 
         screenshot_path = "checkin.png"
         driver.save_screenshot(screenshot_path)
@@ -75,12 +75,54 @@ def check_in():
     except Exception as e:
         send_telegram(f"❌ Lỗi điểm danh: {e}")
 
-# ===== LISTEN TELEGRAM COMMANDS =====
+# ===== LẮNG NGHE LỆNH TELEGRAM =====
 last_update_id = 0
 
 def listen():
     global CHECKIN_TIME, last_update_id
 
-    updates = requests.get(f"https://api.telegram.org/bot{BOT_TOKEN}/getUpdates").json()
+    updates = requests.get(f"https://api.telegram.org/bot{BOT_TOKEN}/getUpdates?offset={last_update_id}").json()
     if "result" not in updates:
-        ret
+        return
+
+    for update in updates["result"]:
+        last_update_id = update["update_id"] + 1
+
+        if "message" not in update:
+            continue
+
+        msg = update["message"].get("text", "")
+
+        # LỆNH ĐỔI GIỜ
+        if msg.startswith("/settime"):
+            new_time = msg.replace("/settime", "").strip()
+            with open(TIME_FILE, "w") as f:
+                f.write(new_time)
+            CHECKIN_TIME = new_time
+
+            schedule.clear()
+            schedule.every().day.at(CHECKIN_TIME).do(check_in)
+
+            send_telegram(f"⏱ Đã đổi giờ điểm danh thành {CHECKIN_TIME}")
+
+        # LỆNH KIỂM TRA TRẠNG THÁI
+        elif msg == "/status":
+            if os.path.exists(LAST_FILE):
+                last = open(LAST_FILE).read()
+                send_telegram(f"📅 Lần điểm danh gần nhất: {last}")
+            else:
+                send_telegram("⚠ Chưa từng điểm danh lần nào.")
+
+# ===== ĐẶT LỊCH =====
+schedule.every().day.at(CHECKIN_TIME).do(check_in)
+
+send_telegram("🤖 Bot đã khởi động!")
+
+# ===== LOOP CHẠY LIÊN TỤC =====
+while True:
+    try:
+        listen()
+        schedule.run_pending()
+        time.sleep(2)
+    except:
+        pass
