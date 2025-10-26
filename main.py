@@ -82,4 +82,8 @@ def check_in():
 schedule.every().day.at(CHECKIN_TIME).do(check_in)
 
 send_telegram(f"🤖 Bot đang chạy! Sẽ tự động điểm danh mỗi ngày lúc {CHECKIN_TIME}.")
-print(f"
+print(f"Bot đã bật — sẽ điểm danh lúc {CHECKIN_TIME} mỗi ngày.")
+
+while True:
+    schedule.run_pending()
+    time.sleep(1)
