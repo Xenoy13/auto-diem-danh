@@ -54,7 +54,7 @@ def check_in():
         driver.quit()
 
         send_telegram("✅ Điểm danh thành công!")
-    open("last_checkin.txt", "w").write(time.strftime("%Y-%m-%d %H:%M:%S"))
+        open("last_checkin.txt", "w").write(time.strftime("%Y-%m-%d %H:%M:%S"))
     except Exception as e:
         send_telegram(f"❌ Lỗi: {e}")
 
