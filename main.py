@@ -54,6 +54,7 @@ def check_in():
         driver.quit()
 
         send_telegram("✅ Điểm danh thành công!")
+    open("last_checkin.txt", "w").write(time.strftime("%Y-%m-%d %H:%M:%S"))
     except Exception as e:
         send_telegram(f"❌ Lỗi: {e}")
 
@@ -78,6 +79,12 @@ def listen():
         if "message" in update and "text" in update["message"]:
             msg = update["message"]["text"]
             if msg.startswith("/settime "):
+                elif msg == "/status":
+    if os.path.exists("last_checkin.txt"):
+        last = open("last_checkin.txt").read().strip()
+        send_telegram(f"🟢 Lần điểm danh gần nhất: {last}")
+    else:
+        send_telegram("⚠️ Chưa có lần điểm danh nào được ghi lại.")
                 new_time = msg.replace("/settime ", "").strip()
                 open(TIME_FILE, "w").write(new_time)
                 CHECKIN_TIME = new_time
