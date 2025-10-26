@@ -5,6 +5,7 @@ import schedule
 import time
 import requests
 import os
+import threading
 
 # ===== THÔNG TIN NGƯỜI DÙNG =====
 EMAIL = "hieucyberwork@gmail.com"
@@ -14,6 +15,7 @@ BOT_TOKEN = os.getenv("BOT_TOKEN")
 CHAT_ID = os.getenv("CHAT_ID")
 
 TIME_FILE = "time.txt"
+LAST_UPDATE_FILE = "last_update.txt"
 
 # ===== ĐỌC GIỜ LƯU TRƯỚC ĐÓ =====
 def read_time():
@@ -25,7 +27,11 @@ CHECKIN_TIME = read_time()
 
 # ===== GỬI TELE =====
 def send_telegram(msg):
-    requests.get(f"https://api.telegram.org/bot{BOT_TOKEN}/sendMessage?chat_id={CHAT_ID}&text={msg}")
+    try:
+        requests.get(f"https://api.telegram.org/bot{BOT_TOKEN}/sendMessage",
+                     params={"chat_id": CHAT_ID, "text": msg})
+    except:
+        pass
 
 # ===== HÀM ĐIỂM DANH =====
 def check_in():
@@ -51,15 +57,24 @@ def check_in():
     except Exception as e:
         send_telegram(f"❌ Lỗi: {e}")
 
-# ===== NHẬN LỆNH TELEGRAM =====
+# ===== NHẬN LỆNH TELEGRAM (LONG POLLING) =====
 def listen():
     global CHECKIN_TIME
-    updates = requests.get(f"https://api.telegram.org/bot{BOT_TOKEN}/getUpdates").json()
+
+    last_update_id = 0
+    if os.path.exists(LAST_UPDATE_FILE):
+        last_update_id = int(open(LAST_UPDATE_FILE).read())
+
+    params = {"offset": last_update_id + 1, "timeout": 20}
+    updates = requests.get(f"https://api.telegram.org/bot{BOT_TOKEN}/getUpdates", params=params).json()
 
     if "result" not in updates:
         return
 
     for update in updates["result"]:
+        last_update_id = update["update_id"]
+        open(LAST_UPDATE_FILE, "w").write(str(last_update_id))
+
         if "message" in update and "text" in update["message"]:
             msg = update["message"]["text"]
             if msg.startswith("/settime "):
@@ -68,13 +83,20 @@ def listen():
                 CHECKIN_TIME = new_time
                 schedule.clear()
                 schedule.every().day.at(CHECKIN_TIME).do(check_in)
-                send_telegram(f"⏰ Đã đổi giờ điểm danh thành **{CHECKIN_TIME}**")
+                send_telegram(f"⏰ Đã đổi giờ điểm danh thành {CHECKIN_TIME}")
+
+# ===== TÁCH THREAD CHO SCHEDULE =====
+def schedule_thread():
+    while True:
+        schedule.run_pending()
+        time.sleep(1)
 
 # ===== KHỞI ĐỘNG =====
 schedule.every().day.at(CHECKIN_TIME).do(check_in)
 send_telegram(f"🤖 Bot đang chạy! Điểm danh lúc {CHECKIN_TIME}")
 
+threading.Thread(target=schedule_thread, daemon=True).start()
+
 while True:
     listen()
-    schedule.run_pending()
-    time.sleep(1)
+
