@@ -16,7 +16,7 @@ CHAT_ID = os.getenv("CHAT_ID")
 TIME_FILE = "time.txt"
 LAST_FILE = "last_checkin.txt"
 
-# ===== ĐỌC GIỜ CŨ =====
+# ===== ĐỌC GIỜ LƯU TRƯỚC =====
 def read_time():
     if os.path.exists(TIME_FILE):
         return open(TIME_FILE).read().strip()
@@ -24,7 +24,7 @@ def read_time():
 
 CHECKIN_TIME = read_time()
 
-# ===== GỬI TIN NHẮN =====
+# ===== GỬI TIN NHẮN TELEGRAM =====
 def send_telegram(msg):
     requests.get(
         f"https://api.telegram.org/bot{BOT_TOKEN}/sendMessage",
@@ -37,7 +37,7 @@ def send_photo(photo_path):
         files = {"photo": open(photo_path, "rb")}
         requests.post(f"https://api.telegram.org/bot{BOT_TOKEN}/sendPhoto?chat_id={CHAT_ID}", files=files)
     except:
-        send_telegram("⚠ Gửi ảnh thất bại, nhưng điểm danh thành công.")
+        send_telegram("⚠ Gửi ảnh thất bại nhưng điểm danh đã xong")
 
 # ===== HÀM ĐIỂM DANH =====
 def check_in():
@@ -51,7 +51,7 @@ def check_in():
 
         driver = uc.Chrome(options=chrome_options)
         driver.get(URL)
-        time.sleep(3)
+        time.sleep(2)
 
         email_input = driver.find_element(By.CSS_SELECTOR, "input[type='text'], input[type='email']")
         email_input.clear()
@@ -60,7 +60,7 @@ def check_in():
         confirm_btn = driver.find_element(By.XPATH, "//button[contains(., 'Xác nhận')]")
         confirm_btn.click()
 
-        time.sleep(4)
+        time.sleep(3)
 
         screenshot_path = "checkin.png"
         driver.save_screenshot(screenshot_path)
@@ -75,54 +75,51 @@ def check_in():
     except Exception as e:
         send_telegram(f"❌ Lỗi điểm danh: {e}")
 
-# ===== LẮNG NGHE LỆNH TELEGRAM =====
+# ===== LISTEN TELEGRAM COMMANDS =====
 last_update_id = 0
 
 def listen():
     global CHECKIN_TIME, last_update_id
 
-    updates = requests.get(f"https://api.telegram.org/bot{BOT_TOKEN}/getUpdates?offset={last_update_id}").json()
+    updates = requests.get(f"https://api.telegram.org/bot{BOT_TOKEN}/getUpdates").json()
     if "result" not in updates:
         return
 
     for update in updates["result"]:
-        last_update_id = update["update_id"] + 1
-
-        if "message" not in update:
+        if update["update_id"] <= last_update_id:
             continue
+        last_update_id = update["update_id"]
 
-        msg = update["message"].get("text", "")
+        if "message" in update and "text" in update["message"]:
+            msg = update["message"]["text"]
 
-        # LỆNH ĐỔI GIỜ
-        if msg.startswith("/settime"):
-            new_time = msg.replace("/settime", "").strip()
-            with open(TIME_FILE, "w") as f:
-                f.write(new_time)
-            CHECKIN_TIME = new_time
+            # THAY ĐỔI GIỜ
+            if msg.startswith("/settime "):
+                new_time = msg.replace("/settime ", "").strip()
+                open(TIME_FILE, "w").write(new_time)
+                CHECKIN_TIME = new_time
+                schedule.clear()
+                schedule.every().day.at(CHECKIN_TIME).do(check_in)
+                send_telegram(f"⏰ Đã đổi giờ điểm danh thành {CHECKIN_TIME}")
 
-            schedule.clear()
-            schedule.every().day.at(CHECKIN_TIME).do(check_in)
+            # KIỂM TRA TRẠNG THÁI
+            elif msg == "/status":
+                if os.path.exists(LAST_FILE):
+                    last = open(LAST_FILE).read()
+                else:
+                    last = "Chưa điểm danh lần nào."
+                send_telegram(f"📌 Lần điểm danh gần nhất: {last}")
 
-            send_telegram(f"⏱ Đã đổi giờ điểm danh thành {CHECKIN_TIME}")
+            # ⭐ ĐIỂM DANH NGAY
+            elif msg == "/checkin":
+                send_telegram("🔄 Đang điểm danh ngay...")
+                check_in()
 
-        # LỆNH KIỂM TRA TRẠNG THÁI
-        elif msg == "/status":
-            if os.path.exists(LAST_FILE):
-                last = open(LAST_FILE).read()
-                send_telegram(f"📅 Lần điểm danh gần nhất: {last}")
-            else:
-                send_telegram("⚠ Chưa từng điểm danh lần nào.")
-
-# ===== ĐẶT LỊCH =====
+# ===== KHỞI ĐỘNG =====
 schedule.every().day.at(CHECKIN_TIME).do(check_in)
+send_telegram(f"🤖 Bot đang chạy! Điểm danh lúc {CHECKIN_TIME}")
 
-send_telegram("🤖 Bot đã khởi động!")
-
-# ===== LOOP CHẠY LIÊN TỤC =====
 while True:
-    try:
-        listen()
-        schedule.run_pending()
-        time.sleep(2)
-    except:
-        pass
+    listen()
+    schedule.run_pending()
+    time.sleep(2)
