@@ -1,2 +1,4 @@
-playwright
 python-telegram-bot==13.14
+schedule
+playwright
+requests
