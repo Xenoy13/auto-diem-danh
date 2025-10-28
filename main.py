@@ -1,46 +1,49 @@
 import os
 import time
-import schedule
-import requests
-from playwright.sync_api import sync_playwright
+import asyncio
+from playwright.async_api import async_playwright
+from telegram import Bot
 
-EMAIL = "hieucyberwork@gmail.com"
-URL = "https://hoctot365.odoo.com/b2102454623412645095758715465195974579457497457469754674279454545454545454545454545454545642167529745794514"
+# Biến môi trường
+EMAIL = os.getenv("EMAIL", "hieucyberwork@gmail.com")
+CHECKIN_URL = "https://hoctot365.odoo.com/b210245"
+CHAT_ID = os.getenv("CHAT_ID")  # ID Telegram Chat của bạn
+BOT_TOKEN = os.getenv("BOT_TOKEN")  # Token bot Telegram
 
-BOT_TOKEN = os.getenv("BOT_TOKEN")
-CHAT_ID = os.getenv("CHAT_ID")
+async def check_in():
+    async with async_playwright() as p:
+        browser = await p.chromium.launch(headless=True, args=["--no-sandbox"])
+        page = await browser.new_page()
+        print("[INFO] Đang mở trang điểm danh...")
 
-def send_telegram(msg):
-    requests.get(f"https://api.telegram.org/bot{BOT_TOKEN}/sendMessage",
-                 params={"chat_id": CHAT_ID, "text": msg})
+        await page.goto(CHECKIN_URL, timeout=60000)
+        await asyncio.sleep(3)
 
-def send_photo(photo_path):
-    with open(photo_path, "rb") as f:
-        requests.post(f"https://api.telegram.org/bot{BOT_TOKEN}/sendPhoto",
-                      params={"chat_id": CHAT_ID}, files={"photo": f})
+        # Điền Gmail
+        await page.fill('input[placeholder*="Nhập email"]', EMAIL)
+        await page.click('button:has-text("Xác nhận Điểm danh")')
 
-def check_in():
-    send_telegram("🔄 Bắt đầu điểm danh…")
-    with sync_playwright() as p:
-        browser = p.chromium.launch(headless=True)
-        page = browser.new_page()
-        page.goto(URL)
-        time.sleep(3)
-        page.fill("input[type='text'], input[type='email']", EMAIL)
-        page.click("text=Xác nhận Điểm danh")
-        time.sleep(3)
-        screenshot = "checkin.png"
-        page.screenshot(path=screenshot)
-        browser.close()
-    send_telegram("✅ Điểm danh thành công!")
-    send_photo(screenshot)
+        # Chờ phản hồi hiển thị (text thành công hoặc alert)
+        await asyncio.sleep(5)
 
-def main():
-    schedule.every().day.at("00:00").do(check_in)
-    send_telegram(f"🤖 Bot đã khởi động! Điểm danh mỗi ngày lúc 00:00")
-    while True:
-        schedule.run_pending()
-        time.sleep(1)
+        # Chụp ảnh kết quả
+        await page.screenshot(path="checkin_result.png", full_page=True)
+        print("[INFO] Đã chụp ảnh kết quả.")
+
+        await browser.close()
+
+async def send_to_telegram():
+    bot = Bot(token=BOT_TOKEN)
+    await bot.send_message(chat_id=CHAT_ID, text="✅ Điểm danh hoàn tất!")
+    with open("checkin_result.png", "rb") as img:
+        await bot.send_photo(chat_id=CHAT_ID, photo=img)
+
+async def main():
+    try:
+        await check_in()
+        await send_to_telegram()
+    except Exception as e:
+        print(f"[ERROR] Lỗi khi điểm danh: {e}")
 
 if __name__ == "__main__":
-    main()
+    asyncio.run(main())
