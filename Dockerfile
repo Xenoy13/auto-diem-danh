@@ -1,10 +1,15 @@
-# Sử dụng image Python chính thức
-FROM python:3.12-slim
+# Base image
+FROM python:3.11-slim
 
-# Cài các gói hệ thống cần thiết
+# Set working directory
+WORKDIR /app
+
+# Copy all files
+COPY . /app
+
+# Install system dependencies for Playwright
 RUN apt-get update && apt-get install -y \
     wget \
-    gnupg \
     libnss3 \
     libatk1.0-0 \
     libatk-bridge2.0-0 \
@@ -15,23 +20,18 @@ RUN apt-get update && apt-get install -y \
     libxdamage1 \
     libxrandr2 \
     libgbm1 \
+    libasound2 \
+    libpangocairo-1.0-0 \
     libpango-1.0-0 \
     libcairo2 \
-    libasound2 \
-    libx11-xcb1 \
-    fonts-liberation \
     libgtk-3-0 \
     && rm -rf /var/lib/apt/lists/*
 
-# Cài Playwright và trình duyệt Chromium
-RUN pip install playwright && playwright install chromium
+# Install Python dependencies
+RUN pip install --no-cache-dir -r requirements.txt
 
-# Copy toàn bộ code vào container
-WORKDIR /app
-COPY . .
+# Install Playwright and browsers
+RUN playwright install --with-deps chromium
 
-# Cài thêm các thư viện Python của bạn
-RUN pip install -r requirements.txt
-
-# Chạy ứng dụng
+# Run the bot
 CMD ["python", "main.py"]
