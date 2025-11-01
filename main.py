@@ -6,7 +6,7 @@ from telegram import Bot
 
 # Biến môi trường
 EMAIL = os.getenv("EMAIL", "hieucyberwork@gmail.com")
-CHECKIN_URL = "https://hoctot365.odoo.com/b210245"
+CHECKIN_URL = "https://hoctot365.odoo.com/b2102454623412645095758715465195974579457497457469754674279454545454545454545454545454545642167529745794514"
 CHAT_ID = os.getenv("CHAT_ID")  # ID Telegram Chat của bạn
 BOT_TOKEN = os.getenv("BOT_TOKEN")  # Token bot Telegram
 
