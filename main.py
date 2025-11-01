@@ -1,49 +1,76 @@
 import os
 import time
-import asyncio
-from playwright.async_api import async_playwright
-from telegram import Bot
+from datetime import datetime
+from playwright.sync_api import sync_playwright
+import schedule
 
-# Biến môi trường
-EMAIL = os.getenv("EMAIL", "hieucyberwork@gmail.com")
+EMAIL = "hieucyberwork@gmail.com"
 CHECKIN_URL = "https://hoctot365.odoo.com/b2102454623412645095758715465195974579457497457469754674279454545454545454545454545454545642167529745794514"
-CHAT_ID = os.getenv("CHAT_ID")  # ID Telegram Chat của bạn
-BOT_TOKEN = os.getenv("BOT_TOKEN")  # Token bot Telegram
 
-async def check_in():
-    async with async_playwright() as p:
-        browser = await p.chromium.launch(headless=True, args=["--no-sandbox"])
-        page = await browser.new_page()
-        print("[INFO] Đang mở trang điểm danh...")
+def log(msg):
+    print(f"[{datetime.now().strftime('%H:%M:%S')}] {msg}", flush=True)
 
-        await page.goto(CHECKIN_URL, timeout=60000)
-        await asyncio.sleep(3)
+def check_in():
+    log("🚀 Bắt đầu điểm danh tự động...")
 
-        # Điền Gmail
-        await page.fill('input[placeholder*="Nhập email"]', EMAIL)
-        await page.click('button:has-text("Xác nhận Điểm danh")')
+    with sync_playwright() as p:
+        browser = p.chromium.launch(headless=True)
+        context = browser.new_context()
+        page = context.new_page()
 
-        # Chờ phản hồi hiển thị (text thành công hoặc alert)
-        await asyncio.sleep(5)
+        try:
+            log("🌐 Đang mở trang điểm danh...")
+            page.goto(CHECKIN_URL, timeout=60000)
+            page.wait_for_load_state("networkidle")
+            time.sleep(4)
 
-        # Chụp ảnh kết quả
-        await page.screenshot(path="checkin_result.png", full_page=True)
-        print("[INFO] Đã chụp ảnh kết quả.")
+            log("🔍 Tìm ô nhập email...")
+            # Tìm theo nhiều cách khác nhau để chắc chắn hoạt động
+            try:
+                page.fill('input[placeholder*="Nhập email"]', EMAIL)
+            except:
+                try:
+                    page.fill("input[type='email']", EMAIL)
+                except:
+                    raise Exception("Không tìm thấy ô nhập email!")
 
-        await browser.close()
+            log("📨 Nhấn nút 'Xác nhận điểm danh'...")
+            try:
+                page.click("button:has-text('Xác nhận')")
+            except:
+                try:
+                    page.click("button:has-text('điểm danh')")
+                except:
+                    raise Exception("Không tìm thấy nút xác nhận điểm danh!")
 
-async def send_to_telegram():
-    bot = Bot(token=BOT_TOKEN)
-    await bot.send_message(chat_id=CHAT_ID, text="✅ Điểm danh hoàn tất!")
-    with open("checkin_result.png", "rb") as img:
-        await bot.send_photo(chat_id=CHAT_ID, photo=img)
+            # Đợi hệ thống phản hồi (JS xử lý)
+            page.wait_for_timeout(7000)
+            log("🕒 Đang chờ kết quả từ máy chủ...")
 
-async def main():
-    try:
-        await check_in()
-        await send_to_telegram()
-    except Exception as e:
-        print(f"[ERROR] Lỗi khi điểm danh: {e}")
+            # Chụp ảnh xác nhận
+            timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+            page.screenshot(path=f"checkin_result_{timestamp}.png")
+            log(f"📸 Đã chụp ảnh kết quả: checkin_result_{timestamp}.png")
 
-if __name__ == "__main__":
-    asyncio.run(main())
+            html = page.content().lower()
+            if "điểm danh thành công" in html or "thành công" in html:
+                log("✅ Điểm danh thành công!")
+            else:
+                log("⚠️ Không tìm thấy thông báo thành công, kiểm tra lại trang chụp ảnh.")
+
+        except Exception as e:
+            log(f"❌ Lỗi khi điểm danh: {e}")
+
+        finally:
+            browser.close()
+            log("🧩 Đã đóng trình duyệt.\n")
+
+if os.environ.get("RUN_ONCE", "false").lower() == "true":
+    check_in()
+else:
+    log("🕛 Lên lịch điểm danh tự động lúc 00:00 mỗi ngày...")
+    schedule.every().day.at("00:00").do(check_in)
+
+    while True:
+        schedule.run_pending()
+        time.sleep(30)
