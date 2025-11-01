@@ -1,37 +1,24 @@
-# Base image
-FROM python:3.11-slim
+# ===== DÙNG DEBIAN CHO CHẮC CHẮN =====
+FROM mcr.microsoft.com/playwright/python:v1.49.0-jammy
 
-# Set working directory
-WORKDIR /app
-
-# Copy all files
-COPY . /app
-
-# Install system dependencies for Playwright
+# ===== CÀI CÁC GÓI BỔ TRỢ =====
 RUN apt-get update && apt-get install -y \
-    wget \
-    libnss3 \
-    libatk1.0-0 \
-    libatk-bridge2.0-0 \
-    libcups2 \
-    libdrm2 \
-    libxkbcommon0 \
-    libxcomposite1 \
-    libxdamage1 \
-    libxrandr2 \
-    libgbm1 \
-    libasound2 \
-    libpangocairo-1.0-0 \
-    libpango-1.0-0 \
-    libcairo2 \
-    libgtk-3-0 \
+    fonts-noto-color-emoji \
+    fonts-noto-cjk \
+    libglib2.0-0 libnss3 libatk1.0-0 libcups2 \
+    libxkbcommon0 libxcomposite1 libxdamage1 libxrandr2 \
+    libgbm1 libasound2 libpangocairo-1.0-0 libcairo2 \
     && rm -rf /var/lib/apt/lists/*
 
-# Install Python dependencies
+# ===== SAO CHÉP TOÀN BỘ CODE =====
+WORKDIR /app
+COPY . .
+
+# ===== CÀI DEPENDENCIES PYTHON =====
 RUN pip install --no-cache-dir -r requirements.txt
 
-# Install Playwright and browsers
-RUN playwright install --with-deps chromium
+# ===== CÀI BROWSER =====
+RUN playwright install chromium
 
-# Run the bot
+# ===== CHẠY BOT =====
 CMD ["python", "main.py"]
